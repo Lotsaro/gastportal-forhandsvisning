@@ -358,7 +358,7 @@ try{ anpassa(); window.addEventListener('load',anpassa); }catch(e){}
 })();
 </script>
 </div>
-<script>window.FV_KONFIG={"hotell": "Eurostop Örebro", "slug": "eurostop-orebro", "mottagare": "d8ef699a0e6345fc693105c6f7ad8f7a", "version": "2026-11-24 13:41"};
+<script>window.FV_KONFIG={"hotell": "Eurostop Örebro", "slug": "eurostop-orebro", "mottagare": "d8ef699a0e6345fc693105c6f7ad8f7a", "version": "2026-11-24 13:47"};
 /* ===== Förhandsvisning: inaktiva formulär + redigeringsläge (endast preview-sajten) ===== */
 (function(){
 var FV = window.FV_KONFIG; // {hotell, slug, mottagare, version}
@@ -522,10 +522,12 @@ dForm.addEventListener('submit', function(e){
   });
   data['Ändringar (JSON)'] = JSON.stringify({hotell: FV.slug, version: FV.version, andringar: a});
   dSand.disabled = true; dSand.textContent = 'Skickar…';
-  fetch('https://formsubmit.co/ajax/' + FV.mottagare, {method: 'POST', headers: {'Content-Type': 'application/json', 'Accept': 'application/json'}, body: JSON.stringify(data)})
-  .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){ if (!r.ok || String(j.success) !== 'true') throw new Error(j.message || ('HTTP ' + r.status)); }); })
+  dStatus.className = 'fv-status'; dStatus.textContent = 'Skickar … det kan ta upp till en minut. Stäng inte sidan.';
+  function posta(){ return fetch('https://formsubmit.co/ajax/' + FV.mottagare, {method: 'POST', headers: {'Content-Type': 'application/json', 'Accept': 'application/json'}, body: JSON.stringify(data)})
+  .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){ if (!r.ok || String(j.success) !== 'true') throw new Error(j.message || ('HTTP ' + r.status)); }); }); }
+  posta().catch(function(){ return new Promise(function(ok){ setTimeout(ok, 3000); }).then(posta); })
   .then(function(){
-    dStatus.className = 'fv-status ok'; dStatus.innerHTML = '<strong>Tack! Dina ' + a.length + ' ändringar är skickade för granskning.</strong>';
+    dStatus.className = 'fv-status ok'; dStatus.innerHTML = '<strong>Tack! ' + (a.length === 1 ? 'Din ändring är skickad' : 'Dina ' + a.length + ' ändringar är skickade') + ' för granskning.</strong>';
     Object.keys(block).forEach(function(id){ var b = block[id]; b.el.innerHTML = b.orgHtml; b.el.classList.remove('fv-andrad'); });
     try { localStorage.removeItem(NYCKEL); } catch(e){}
     uppdatera(); dSand.textContent = 'Skickat';
