@@ -235,6 +235,13 @@ form[data-typ] button.skicka[disabled]{opacity:.55;cursor:not-allowed}
 @media (max-width:600px){.fv-tips{display:none}.fv-bar{padding:.5rem .55rem .5rem .8rem}}
 @media (min-width:900px){.fv-bar{max-width:760px}}
 @media (max-width:430px){.fv-banner{gap:.45rem;font-size:12px;padding:.45rem .6rem}.fv-banner a{font-size:11px}}
+.fv-toast{position:fixed;left:50%;top:14px;transform:translate(-50%,-20px);opacity:0;z-index:80;background:#176c2b;color:#fff;font:600 14px/1.3 system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;padding:.65rem 1rem;border-radius:999px;box-shadow:0 8px 24px rgba(0,0,0,.25);transition:all .25s;pointer-events:none;max-width:calc(100% - 24px);text-align:center}
+.fv-toast.syns{opacity:1;transform:translate(-50%,0)}.fv-toast.fel{background:#a33}
+.fv-check{display:flex!important;align-items:center;gap:.5rem;font-weight:400!important}.fv-check input{width:auto}
+.fv-hist{padding:1.2rem 1.2rem 1rem}.fv-hlista{max-height:50vh}
+.fv-hrad{display:flex;justify-content:space-between;align-items:center;gap:.5rem;margin-bottom:.3rem;font-size:.82rem;color:#444}
+.fv-mini{font:600 12px/1 system-ui,sans-serif;border:1px solid #1d1d1f;background:#fff;border-radius:999px;padding:.35rem .7rem;cursor:pointer}
+.fv-angrad{font-size:.75rem;color:#777}
 </style>
 </head>
 <body>
@@ -359,7 +366,7 @@ try{ anpassa(); window.addEventListener('load',anpassa); }catch(e){}
 })();
 </script>
 </div>
-<script>window.FV_KONFIG={"hotell": "Eurostop Örebro", "slug": "eurostop-orebro", "mottagare": "d8ef699a0e6345fc693105c6f7ad8f7a", "version": "2026-11-24 13:49"};
+<script>window.FV_KONFIG={"hotell": "Eurostop Örebro", "slug": "eurostop-orebro", "cms": "https://gastportal-cms.fly.dev", "version": "2026-11-24 14:24"};
 /* ===== Förhandsvisning: inaktiva formulär + redigeringsläge (endast preview-sajten) ===== */
 (function(){
 var FV = window.FV_KONFIG; // {hotell, slug, mottagare, version}
@@ -416,39 +423,70 @@ kandidater.forEach(function(el){
   block[id] = {el: el, sektion: s.namn, orgText: txt(el), orgHtml: el.innerHTML};
 });
 
-function lasSparat(){ try { return JSON.parse(localStorage.getItem(NYCKEL) || '{}'); } catch(e){ return {}; } }
-function spara(){
-  var d = {};
-  Object.keys(block).forEach(function(id){ var b = block[id]; if (b.el.classList.contains('fv-andrad')) d[id] = {html: b.el.innerHTML, text: txt(b.el)}; });
-  try { if (Object.keys(d).length) localStorage.setItem(NYCKEL, JSON.stringify(d)); else localStorage.removeItem(NYCKEL); } catch(e){}
+// ---------- 3. Innehåll från gastportal-cms (live-redigering) ----------
+var CMS = FV.cms.replace(/\/$/, '') + '/api/' + FV.slug;
+var UTKAST = 'gp-utkast-' + FV.slug, KODNYCKEL = 'gp-kod-' + FV.slug, NAMNNYCKEL = 'gp-redaktor';
+var serverOk = false, ejPlacerade = [];
+Object.keys(block).forEach(function(id){ var b = block[id]; b.nyckel = id; b.server = null; b.visad = b.orgText; });
+function ls(k, v){ try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch(e){ return null; } }
+function hamta(url, opt, ms){
+  var ctl = window.AbortController ? new AbortController() : null, t = ctl && setTimeout(function(){ ctl.abort(); }, ms || 8000);
+  opt = opt || {}; if (ctl) opt.signal = ctl.signal;
+  return fetch(url, opt).then(function(r){ if (t) clearTimeout(t); return r.json().catch(function(){ return {}; }).then(function(j){ if (!r.ok) { var e = new Error(j.fel || ('HTTP ' + r.status)); e.status = r.status; throw e; } return j; }); });
+}
+function posta(akt, data){ return hamta(CMS + '/' + akt, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)}, 20000); }
+// lägg serverns innehåll på sidan. Matchning: block-id + ursprungstext ("bas"); om sidan byggts om och id:t flyttat
+// letas blocket upp via bas-texten inom samma ämne. Annars hoppas det över (inget skrivs fel).
+function tillampa(karta){
+  var anvanda = {}; ejPlacerade = [];
+  Object.keys(karta || {}).forEach(function(nyckel){
+    var o = karta[nyckel], b = block[nyckel];
+    if (!(b && (!o.bas || b.orgText === o.bas.trim()))) {
+      var sek = nyckel.split('/')[0];
+      var id2 = Object.keys(block).filter(function(i){ return i.split('/')[0] === sek && block[i].orgText === (o.bas || '').trim() && !anvanda[i]; })[0];
+      b = id2 && block[id2];
+    }
+    if (!b) { ejPlacerade.push(nyckel); return; }
+    anvanda[b.el.dataset.fvId] = true; b.nyckel = nyckel; b.server = o;
+  });
+  Object.keys(block).forEach(function(id){ var b = block[id];
+    if (!anvanda[id]) { b.server = null; b.nyckel = id; }
+    if (b.el.classList.contains('fv-andrad')) return;           // osparad ändring här på enheten – rör inte
+    b.el.innerHTML = b.server ? b.server.html : b.orgHtml; b.visad = txt(b.el);
+  });
+  if (ejPlacerade.length && window.console) console.warn('Förhandsvisning: kunde inte placera', ejPlacerade);
 }
 function andringar(){
   return Object.keys(block).filter(function(id){ return block[id].el.classList.contains('fv-andrad'); }).map(function(id){
-    var b = block[id]; return {amne: b.sektion, block: id, gammal: b.orgText, ny: txt(b.el)};
+    var b = block[id]; return {block: b.nyckel, amne: b.sektion, bas: b.orgText, html: b.el.innerHTML, gammal: b.visad, ny: txt(b.el)};
   });
 }
-function kolla(el){
-  var b = block[el.dataset.fvId]; if (!b) return;
-  el.classList.toggle('fv-andrad', txt(el) !== b.orgText);
+function kolla(el){ var b = block[el.dataset.fvId]; if (b) el.classList.toggle('fv-andrad', txt(el) !== b.visad); }
+function sparaUtkast(){
+  var d = {}; Object.keys(block).forEach(function(id){ var b = block[id]; if (b.el.classList.contains('fv-andrad')) d[id] = {html: b.el.innerHTML, visad: b.visad}; });
+  ls(UTKAST, Object.keys(d).length ? JSON.stringify(d) : null);
 }
 
-// UI
+// ---------- UI ----------
 var bar = document.createElement('div'); bar.className = 'fv-bar'; bar.setAttribute('role','region'); bar.setAttribute('aria-label','Redigeringsläge');
-bar.innerHTML = '<span class="fv-antal" aria-live="polite">0 ändringar</span>' +
-  '<button type="button" class="fv-knapp sek" data-fv="angra">Ångra alla</button>' +
+bar.innerHTML = '<span class="fv-antal" aria-live="polite">Inga osparade ändringar</span>' +
+  '<button type="button" class="fv-knapp" data-fv="spara" disabled>Spara</button>' +
+  '<button type="button" class="fv-knapp sek" data-fv="angra-osparat" disabled>Ångra osparat</button>' +
+  '<button type="button" class="fv-knapp sek" data-fv="historik">Historik / ångra</button>' +
   '<button type="button" class="fv-knapp sek" data-fv="klar">Avsluta</button>' +
-  '<button type="button" class="fv-knapp" data-fv="skicka" disabled>Skicka ändringar</button>' +
-  '<span class="fv-tips">Klicka på en text och skriv. Ändringar sparas i den här webbläsaren tills du skickar dem.</span>';
+  '<span class="fv-tips">Klicka på en text och skriv – tryck sedan Spara. Ändringen syns direkt för alla.</span>';
 document.body.appendChild(bar);
-var antalEl = bar.querySelector('.fv-antal'), skickaBtn = bar.querySelector('[data-fv=skicka]');
-var redBtn = document.querySelector('.fv-banner [data-fv=redigera]');
+var toast = document.createElement('div'); toast.className = 'fv-toast'; toast.setAttribute('role','status'); toast.setAttribute('aria-live','polite'); document.body.appendChild(toast);
+function visaToast(t, fel){ toast.textContent = t; toast.className = 'fv-toast syns' + (fel ? ' fel' : ''); clearTimeout(visaToast.t); visaToast.t = setTimeout(function(){ toast.className = 'fv-toast'; }, fel ? 6000 : 3000); }
+var antalEl = bar.querySelector('.fv-antal'), sparaBtn = bar.querySelector('[data-fv=spara]'), angraBtn = bar.querySelector('[data-fv=angra-osparat]');
+var redBtn = document.querySelector('.fv-banner [data-fv=redigera]'), tagEl = document.querySelector('.fv-banner .fv-tag');
 
 function uppdatera(){
   var n = andringar().length;
-  antalEl.textContent = n + (n === 1 ? ' ändring' : ' ändringar');
-  skickaBtn.disabled = n === 0;
+  antalEl.textContent = n ? (n + (n === 1 ? ' osparad ändring' : ' osparade ändringar')) : 'Inga osparade ändringar';
+  sparaBtn.disabled = !n; angraBtn.disabled = !n;
   if (redBtn) redBtn.textContent = n ? 'Redigera (' + n + ')' : 'Redigera';
-  spara();
+  sparaUtkast();
 }
 var pa = false;
 function satt(on){
@@ -459,87 +497,112 @@ function satt(on){
     else { el.removeAttribute('contenteditable'); el.classList.remove('fv-redigerbar'); }
   });
   if (redBtn) redBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
-  if (on) { ROT.querySelectorAll('details.amne').forEach(function(d){ /* låt användaren öppna själv */ }); }
 }
 ROT.addEventListener('input', function(e){ var el = e.target.closest && e.target.closest('[data-fv-id]'); if (el) { kolla(el); uppdatera(); } });
-// klistra in som ren text
 ROT.addEventListener('paste', function(e){ if (!pa) return; var el = e.target.closest && e.target.closest('[data-fv-id]'); if (!el) return;
   e.preventDefault(); var t = (e.clipboardData || window.clipboardData).getData('text/plain'); document.execCommand('insertText', false, t); });
-// länkar inne i redigerbara block ska inte navigera i redigeringsläge
 ROT.addEventListener('click', function(e){ if (!pa) return; var a = e.target.closest('a'); if (a && a.closest('[data-fv-id]')) e.preventDefault(); }, true);
-// Enter i rubriker/listpunkter/celler: ingen radbrytning (blur istället)
 ROT.addEventListener('keydown', function(e){ if (!pa || e.key !== 'Enter') return; var el = e.target.closest && e.target.closest('[data-fv-id]');
   if (el && /^(H1|H2|H3|H4|DT|TH|TD|LI)$/.test(el.tagName) && !e.shiftKey) { e.preventDefault(); el.blur(); } });
 
-if (redBtn) redBtn.addEventListener('click', function(){ satt(!pa); });
-bar.querySelector('[data-fv=klar]').addEventListener('click', function(){ satt(false); });
-bar.querySelector('[data-fv=angra]').addEventListener('click', function(){
-  if (!andringar().length || !confirm('Ångra alla ändringar på den här sidan?')) return;
-  Object.keys(block).forEach(function(id){ var b = block[id]; b.el.innerHTML = b.orgHtml; b.el.classList.remove('fv-andrad'); });
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function dialog(html){ var d = document.createElement('dialog'); d.className = 'fv-dialog'; d.innerHTML = html; document.body.appendChild(d); return d; }
+function oppna(d){ if (d.showModal) d.showModal(); else d.setAttribute('open', ''); }
+function stang(d){ if (d.close) d.close(); else d.removeAttribute('open'); }
+
+// --- inloggning med hotellets redigeringskod (sparas på enheten) ---
+var dLogin = dialog('<form novalidate><h2>Redigera ' + esc(FV.hotell) + '</h2>' +
+  '<p class="fv-ing">Ange ditt namn och hotellets redigeringskod. Ändringar du sparar syns direkt för alla som öppnar sidan. Namnet visas i ändringshistoriken.</p>' +
+  '<label for="fv-namn">Ditt namn</label><input id="fv-namn" name="namn" autocomplete="name" required>' +
+  '<label for="fv-kod">Redigeringskod</label><input id="fv-kod" name="kod" autocomplete="off" autocapitalize="off" spellcheck="false" required>' +
+  '<label class="fv-check"><input type="checkbox" name="minns" checked> Kom ihåg koden på den här enheten</label>' +
+  '<div class="fv-status" role="status" aria-live="polite"></div>' +
+  '<div class="fv-knappar"><button type="button" class="sek" data-fv="stang">Avbryt</button><button type="submit" class="prim">Börja redigera</button></div></form>');
+var lf = dLogin.querySelector('form'), lst = dLogin.querySelector('.fv-status');
+dLogin.querySelector('[data-fv=stang]').addEventListener('click', function(){ stang(dLogin); });
+var kodSession = ls(KODNYCKEL) || '';
+function namn(){ return ls(NAMNNYCKEL) || ''; }
+lf.addEventListener('submit', function(e){
+  e.preventDefault(); var n = lf.namn.value.trim(), k = lf.kod.value.trim();
+  if (!n || !k) { lst.className = 'fv-status fel'; lst.textContent = 'Fyll i namn och kod.'; return; }
+  lst.className = 'fv-status'; lst.textContent = 'Kontrollerar …';
+  posta('kontroll', {kod: k, namn: n}).then(function(){
+    ls(NAMNNYCKEL, n); kodSession = k; ls(KODNYCKEL, lf.minns.checked ? k : null);
+    stang(dLogin); satt(true); visaToast('Redigeringsläge – klicka på en text.');
+  }).catch(function(err){ lst.className = 'fv-status fel'; lst.textContent = err.status ? err.message : 'Innehållsservern svarar inte just nu. Försök igen om en stund.'; });
+});
+function startaRedigering(){
+  if (!serverOk) { visaToast('Innehållsservern nås inte just nu – redigering är inte möjlig. Ladda om sidan om en stund.', true); return; }
+  if (kodSession && namn()) { satt(true); return; }
+  lf.namn.value = namn(); lf.kod.value = kodSession; lst.textContent = ''; oppna(dLogin);
+}
+if (redBtn) redBtn.addEventListener('click', function(){ pa ? satt(false) : startaRedigering(); });
+bar.querySelector('[data-fv=klar]').addEventListener('click', function(){
+  if (andringar().length && !confirm('Du har osparade ändringar. Avsluta ändå? (De ligger kvar som utkast på den här enheten.)')) return; satt(false); });
+angraBtn.addEventListener('click', function(){
+  if (!andringar().length || !confirm('Ångra alla osparade ändringar?')) return;
+  Object.keys(block).forEach(function(id){ var b = block[id]; if (b.el.classList.contains('fv-andrad')) { b.el.innerHTML = b.server ? b.server.html : b.orgHtml; b.el.classList.remove('fv-andrad'); } });
   uppdatera();
 });
-
-// återställ sparade (ej skickade) ändringar
-var sparat = lasSparat(), aterst = 0;
-Object.keys(sparat).forEach(function(id){ var b = block[id]; if (!b) return; b.el.innerHTML = sparat[id].html; kolla(b.el); aterst++; });
-uppdatera();
-if (aterst) { satt(true); }
-
-// ---------- 3. Skicka-dialog ----------
-var dlg = document.createElement('dialog'); dlg.className = 'fv-dialog';
-dlg.innerHTML = '<form method="dialog" novalidate><h2>Skicka ändringsförslag</h2>' +
-  '<p class="fv-ing">Ändringarna skickas för granskning. Själva sidan ändras inte förrän de har godkänts.</p>' +
-  '<label for="fv-namn">Ditt namn</label><input id="fv-namn" name="namn" autocomplete="name" required>' +
-  '<label for="fv-epost">Din e-post</label><input id="fv-epost" name="epost" type="email" autocomplete="email" required>' +
-  '<label for="fv-komm">Kommentar <span style="font-weight:400;color:#777">(valfritt)</span></label><textarea id="fv-komm" name="kommentar" placeholder="T.ex. övriga synpunkter på sidan"></textarea>' +
-  '<ul class="fv-lista" aria-label="Ändringar"></ul>' +
-  '<div class="fv-status" role="status" aria-live="polite"></div>' +
-  '<div class="fv-knappar"><button type="button" class="sek" data-fv="stang">Avbryt</button><button type="submit" class="prim" data-fv="sand">Skicka</button></div></form>';
-document.body.appendChild(dlg);
-var dForm = dlg.querySelector('form'), dStatus = dlg.querySelector('.fv-status'), dLista = dlg.querySelector('.fv-lista'), dSand = dlg.querySelector('[data-fv=sand]');
-try { var mig = JSON.parse(localStorage.getItem('gp-forhand-avsandare') || '{}'); if (mig.namn) dForm.namn.value = mig.namn; if (mig.epost) dForm.epost.value = mig.epost; } catch(e){}
-function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
-skickaBtn.addEventListener('click', function(){
+function felVidSparning(err){
+  if (err.status === 401) { kodSession = ''; ls(KODNYCKEL, null); visaToast('Redigeringskoden gäller inte längre – ange den igen.', true); startaRedigering(); }
+  else visaToast(err.status ? err.message : 'Kunde inte spara – servern svarar inte. Ändringarna ligger kvar, försök igen.', true);
+}
+sparaBtn.addEventListener('click', function(){
   var a = andringar(); if (!a.length) return;
-  dLista.innerHTML = a.map(function(x){ return '<li><b>' + esc(x.amne) + ' · ' + esc(x.block) + '</b><del>' + esc(x.gammal) + '</del><ins>' + esc(x.ny) + '</ins></li>'; }).join('');
-  dStatus.textContent = ''; dStatus.className = 'fv-status'; dSand.disabled = false;
-  if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+  sparaBtn.disabled = true; sparaBtn.textContent = 'Sparar …';
+  posta('spara', {kod: kodSession, namn: namn(), andringar: a.map(function(x){ return {block: x.block, amne: x.amne, bas: x.bas, html: x.html}; })})
+  .then(function(j){
+    Object.keys(block).forEach(function(id){ block[id].el.classList.remove('fv-andrad'); });
+    tillampa(j.block); uppdatera();
+    var t = new Date(); visaToast('Sparat ✓ ' + ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2) + ' – syns nu för alla');
+  }).catch(felVidSparning).then(function(){ sparaBtn.textContent = 'Spara'; uppdatera(); });
 });
-dlg.querySelector('[data-fv=stang]').addEventListener('click', function(){ dlg.close ? dlg.close() : dlg.removeAttribute('open'); });
-dForm.addEventListener('submit', function(e){
-  e.preventDefault();
-  var namn = dForm.namn.value.trim(), epost = dForm.epost.value.trim(), komm = dForm.kommentar.value.trim();
-  if (!namn || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(epost)) { dStatus.className = 'fv-status fel'; dStatus.textContent = 'Fyll i ditt namn och en giltig e-postadress.'; return; }
-  try { localStorage.setItem('gp-forhand-avsandare', JSON.stringify({namn: namn, epost: epost})); } catch(e){}
-  var a = andringar();
-  var data = {
-    _subject: 'Ändringsförslag – ' + FV.hotell + ' (' + a.length + (a.length === 1 ? ' ändring' : ' ändringar') + ') från ' + namn,
-    _template: 'box', _captcha: 'false',
-    'Hotell': FV.hotell, 'Namn': namn, 'email': epost, 'Kommentar': komm || '–',
-    'Sida': location.href.split('#')[0], 'Förhandsversion': FV.version, 'Antal ändringar': String(a.length)
-  };
-  a.forEach(function(x, i){
-    data['Ändring ' + (i + 1)] = 'ÄMNE: ' + x.amne + '\nBLOCK-ID: ' + x.block + '\n\nGAMMAL TEXT:\n' + x.gammal + '\n\nNY TEXT:\n' + x.ny;
-  });
-  data['Ändringar (JSON)'] = JSON.stringify({hotell: FV.slug, version: FV.version, andringar: a});
-  dSand.disabled = true; dSand.textContent = 'Skickar…';
-  dStatus.className = 'fv-status'; dStatus.textContent = 'Skickar … det kan ta upp till en minut. Stäng inte sidan.';
-  function posta(){ return fetch('https://formsubmit.co/ajax/' + FV.mottagare, {method: 'POST', headers: {'Content-Type': 'application/json', 'Accept': 'application/json'}, body: JSON.stringify(data)})
-  .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){ if (!r.ok || String(j.success) !== 'true') throw new Error(j.message || ('HTTP ' + r.status)); }); }); }
-  posta().catch(function(){ return new Promise(function(ok){ setTimeout(ok, 3000); }).then(posta); })
-  .then(function(){
-    dStatus.className = 'fv-status ok'; dStatus.innerHTML = '<strong>Tack! ' + (a.length === 1 ? 'Din ändring är skickad' : 'Dina ' + a.length + ' ändringar är skickade') + ' för granskning.</strong>';
-    Object.keys(block).forEach(function(id){ var b = block[id]; b.el.innerHTML = b.orgHtml; b.el.classList.remove('fv-andrad'); });
-    try { localStorage.removeItem(NYCKEL); } catch(e){}
-    uppdatera(); dSand.textContent = 'Skickat';
-    setTimeout(function(){ if (dlg.open) dlg.close(); satt(false); }, 2500);
-  })
-  .catch(function(err){
-    dStatus.className = 'fv-status fel'; dStatus.innerHTML = '<strong>Det gick inte att skicka just nu.</strong> Ändringarna finns kvar – försök igen om en stund.';
-    dSand.disabled = false; dSand.textContent = 'Skicka'; if (window.console) console.warn('Förhandsvisning:', err);
-  });
-});
-window.FV_INTERN = {block: block, andringar: andringar, satt: satt};
+
+// --- historik + ångra ---
+var dHist = dialog('<div class="fv-hist"><h2>Ändringshistorik</h2><p class="fv-ing">Alla sparade ändringar för ' + esc(FV.hotell) + '. "Ångra" återställer texten som den var före ändringen.</p>' +
+  '<div class="fv-knappar" style="justify-content:flex-start;margin:0 0 .6rem"><button type="button" class="prim" data-fv="angra-senaste">Ångra senaste ändringen</button></div>' +
+  '<ul class="fv-lista fv-hlista"></ul><div class="fv-status" role="status" aria-live="polite"></div>' +
+  '<div class="fv-knappar"><button type="button" class="sek" data-fv="logga-ut">Glöm koden på enheten</button><button type="button" class="sek" data-fv="stang">Stäng</button></div></div>');
+var hl = dHist.querySelector('.fv-hlista'), hst = dHist.querySelector('.fv-status');
+dHist.querySelector('[data-fv=stang]').addEventListener('click', function(){ stang(dHist); });
+dHist.querySelector('[data-fv=logga-ut]').addEventListener('click', function(){ kodSession = ''; ls(KODNYCKEL, null); stang(dHist); satt(false); visaToast('Koden är borttagen från enheten.'); });
+function tidStr(iso){ try { return new Date(iso).toLocaleString('sv-SE', {dateStyle: 'short', timeStyle: 'short'}); } catch(e){ return iso; } }
+function visaText(o, bas){ return o ? o.text : (bas || '(ursprunglig text)'); }
+function laddaHistorik(){
+  if (!hl.children.length) hl.innerHTML = '<li>Hämtar …</li>';
+  posta('historik', {kod: kodSession}).then(function(j){
+    var angrade = {}; j.historik.forEach(function(p){ if (p.typ === 'angra') angrade[p.ref] = p; });
+    hl.innerHTML = j.historik.length ? j.historik.map(function(p){
+      var rad = p.andringar.map(function(a){ return '<b>' + esc(a.amne) + '</b><del>' + esc(visaText(a.fore, a.bas_text)) + '</del><ins>' + esc(visaText(a.efter, a.bas_text)) + '</ins>'; }).join('');
+      var knapp = p.typ === 'spara' && !angrade[p.id] ? '<button type="button" class="fv-mini" data-angra="' + p.id + '">Ångra</button>' : (angrade[p.id] ? '<em class="fv-angrad">ångrad</em>' : '');
+      return '<li><div class="fv-hrad"><span>#' + p.id + ' · ' + esc(tidStr(p.tid)) + ' · <strong>' + esc(p.av) + '</strong>' + (p.typ === 'angra' ? ' · ångrade #' + p.ref : '') + '</span>' + knapp + '</div>' + rad + '</li>';
+    }).join('') : '<li>Inga sparade ändringar ännu.</li>';
+  }).catch(function(err){ hl.innerHTML = ''; hst.className = 'fv-status fel'; hst.textContent = err.message || 'Kunde inte hämta historiken.'; if (err.status === 401) { kodSession = ''; ls(KODNYCKEL, null); } });
+}
+function angra(id){
+  if (andringar().length && !confirm('Du har osparade ändringar på sidan. De ligger kvar, men kontrollera dem efteråt. Fortsätt?')) return;
+  hst.className = 'fv-status'; hst.textContent = 'Ångrar …';
+  posta('angra', id ? {kod: kodSession, namn: namn(), id: id} : {kod: kodSession, namn: namn()}).then(function(j){
+    tillampa(j.block); uppdatera();
+    hst.className = 'fv-status ok'; hst.textContent = 'Ändring #' + j.angrat + ' är ångrad' + (j.hoppades_over.length ? ' (' + j.hoppades_over.length + ' block hade ändrats igen och lämnades orörda)' : '') + '.';
+    visaToast('Ångrat ✓ – syns nu för alla'); laddaHistorik();
+  }).catch(function(err){ hst.className = 'fv-status fel'; hst.textContent = err.message || 'Kunde inte ångra.'; });
+}
+dHist.querySelector('[data-fv=angra-senaste]').addEventListener('click', function(){ angra(null); });
+hl.addEventListener('click', function(e){ var b = e.target.closest('[data-angra]'); if (b) angra(+b.dataset.angra); });
+bar.querySelector('[data-fv=historik]').addEventListener('click', function(){ if (!kodSession) return startaRedigering(); hst.textContent = ''; hst.className = 'fv-status'; hl.innerHTML = ''; oppna(dHist); laddaHistorik(); });
+
+// --- start: hämta innehåll, lägg på utkast ---
+function aterstallUtkast(){
+  var u = {}; try { u = JSON.parse(ls(UTKAST) || '{}'); } catch(e){}
+  var n = 0; Object.keys(u).forEach(function(id){ var b = block[id]; if (!b) return; b.el.innerHTML = u[id].html; kolla(b.el); if (b.el.classList.contains('fv-andrad')) n++; });
+  uppdatera(); if (n && serverOk && kodSession && namn()) { satt(true); visaToast('Du har ' + n + ' osparade ändringar från förra gången.'); }
+}
+hamta(CMS + '/innehall', {cache: 'no-store'}, 6000).then(function(j){ serverOk = true; tillampa(j.block); })
+.catch(function(err){ serverOk = false; if (tagEl) tagEl.title = 'Innehållsservern nås inte – visar inbyggd text'; if (window.console) console.warn('Förhandsvisning: innehållsservern nås inte, visar inbyggd text.', err); })
+.then(aterstallUtkast);
+window.FV_INTERN = {block: block, andringar: andringar, satt: satt, tillampa: tillampa, serverOk: function(){ return serverOk; }, ejPlacerade: function(){ return ejPlacerade; }};
 })();
 </script>
 </body>
