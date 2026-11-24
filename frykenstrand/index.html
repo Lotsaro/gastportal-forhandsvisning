@@ -234,6 +234,7 @@ form[data-typ] button.skicka[disabled]{opacity:.55;cursor:not-allowed}
 .fv-dialog *,.fv-bar *{box-sizing:border-box}
 @media (max-width:600px){.fv-tips{display:none}.fv-bar{padding:.5rem .55rem .5rem .8rem}}
 @media (min-width:900px){.fv-bar{max-width:760px}}
+@media (max-width:430px){.fv-banner{gap:.45rem;font-size:12px;padding:.45rem .6rem}.fv-banner a{font-size:11px}}
 </style>
 </head>
 <body>
@@ -358,7 +359,7 @@ try{ anpassa(); window.addEventListener('load',anpassa); }catch(e){}
 })();
 </script>
 </div>
-<script>window.FV_KONFIG={"hotell": "Hotell Frykenstrand", "slug": "frykenstrand", "mottagare": "d8ef699a0e6345fc693105c6f7ad8f7a", "version": "2026-11-24 13:47"};
+<script>window.FV_KONFIG={"hotell": "Hotell Frykenstrand", "slug": "frykenstrand", "mottagare": "d8ef699a0e6345fc693105c6f7ad8f7a", "version": "2026-11-24 13:49"};
 /* ===== Förhandsvisning: inaktiva formulär + redigeringsläge (endast preview-sajten) ===== */
 (function(){
 var FV = window.FV_KONFIG; // {hotell, slug, mottagare, version}
@@ -396,7 +397,7 @@ var kandidater = [].slice.call(ROT.querySelectorAll(SEL)).filter(function(el){
 // ta bort block som innehåller andra block (t.ex. li med p inuti) – det inre blocket redigeras
 kandidater = kandidater.filter(function(el){ return !kandidater.some(function(o){ return o !== el && el.contains(o); }); });
 
-function txt(el){ return (el.innerText || el.textContent).replace(/\u00a0/g,' ').replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim(); }
+function txt(el){ var c = el.cloneNode(true); c.querySelectorAll('br').forEach(function(b){ b.replaceWith('\n'); }); c.querySelectorAll('div,p').forEach(function(b){ b.prepend('\n'); }); return c.textContent.replace(/[ \t]+/g,' ').replace(/\u00a0/g,' ').replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim(); }
 function sektionAv(el){
   var p = el.closest('.hi-panel');
   if (p) { var r = p.querySelector('.hi-rubrik'); return {id: p.id, namn: 'Hotellinformation › ' + (r ? txt(r) : p.id)}; }
