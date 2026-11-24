@@ -43,9 +43,10 @@ window.PORTAL_CONFIG = {
 .gp .hopp{position:absolute;left:-999px;top:0;background:#fff;padding:.5rem 1rem;z-index:99}
 .gp .hopp:focus{left:.5rem}
 .gp header.topp{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.96);backdrop-filter:saturate(1.4) blur(8px);border-bottom:1px solid var(--linje)}
-.gp .topp-inner{max-width:760px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.55rem 1rem}
-.gp .topp img.logo{height:52px;width:auto}
-.gp .rum-bricka{font-size:.85rem;font-weight:600;background:var(--primar);color:#fff;border-radius:999px;padding:.3rem .75rem;white-space:nowrap}
+.gp .topp-inner{max-width:760px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.55rem 1rem;min-width:0}
+.gp .topp-inner>a{min-width:0}
+.gp .topp img.logo{height:52px;width:auto;max-width:100%}
+.gp .rum-bricka{font-size:.85rem;font-weight:600;background:var(--primar);color:#fff;border-radius:999px;padding:.3rem .75rem;white-space:nowrap;flex-shrink:0}
 .gp .rum-bricka[hidden]{display:none}
 .gp main{max-width:760px;margin:0 auto;padding:0 0 3rem}
 .gp .hero{position:relative;margin:0;min-height:300px;display:flex;align-items:flex-end;color:#fff;overflow:hidden}
@@ -370,7 +371,7 @@ try{ anpassa(); window.addEventListener('load',anpassa); }catch(e){}
 })();
 </script>
 </div>
-<script>window.FV_KONFIG={"hotell": "Eurostop Örebro", "slug": "eurostop-orebro", "cms": "https://gastportal-cms.fly.dev", "version": "2026-11-24 14:54"};
+<script>window.FV_KONFIG={"hotell": "Eurostop Örebro", "slug": "eurostop-orebro", "cms": "https://gastportal-cms.fly.dev", "version": "2026-11-24 16:48"};
 /* ===== Förhandsvisning: inaktiva formulär + redigeringsläge (endast preview-sajten) ===== */
 (function(){
 var FV = window.FV_KONFIG; // {hotell, slug, mottagare, version}
